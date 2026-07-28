@@ -28,6 +28,13 @@ export async function createSnapTransaction({
       last_name: "Customer",
     },
     custom_field1: sessionId,
+    // Ini parameter batas waktu 3 menit
+    custom_expiry: {
+      expiry_duration: 3,
+      unit: "minute"
+    },
+    // Opsional: jika kamu HANYA ingin memunculkan QRIS di popup Snap
+    enabled_payments: ["gopay", "other_qris"]
   };
 
   const transaction = await snap.createTransaction(params);

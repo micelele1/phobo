@@ -11,3 +11,8 @@ export function getPaymentStatus(orderId: string): PaymentStatus | undefined {
 export function setPaymentStatus(orderId: string, status: PaymentStatus) {
   paymentStore.set(orderId, status);
 }
+
+// Fungsi baru untuk mencegah memory leak
+export function clearPaymentStatus(orderId: string) {
+  paymentStore.delete(orderId);
+}
