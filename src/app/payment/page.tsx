@@ -64,7 +64,6 @@ export default function Payment() {
   }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, session?.paymentRedirectUrl, setPaymentData]);
 
   // Polling for Midtrans payment status
- // Polling for Midtrans payment status
   useEffect(() => {
     if (!midtransEnabled || !session?.paymentOrderId) return;
 
@@ -115,6 +114,17 @@ export default function Payment() {
       />
       <div className="payment-summary">
         {session?.packageName} - Rp. {(session?.price ?? 0).toLocaleString("id-ID")},00
+        
+        {session?.paymentOrderId && (
+          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444' }}>
+            <p style={{ fontSize: '14px', color: '#aaa', margin: '0 0 5px 0' }}>Jika terjadi kendala, silakan foto layar ini</p>
+            <p style={{ fontSize: '18px', fontFamily: 'monospace', margin: '0', color: '#fff', letterSpacing: '2px' }}>
+              ID: {session.paymentOrderId}
+            </p>
+          </div>
+        )}
+        
+
         {!midtransEnabled && !isInitializing && (
           <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
             {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
