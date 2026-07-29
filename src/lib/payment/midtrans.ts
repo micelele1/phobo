@@ -30,7 +30,7 @@ export async function createSnapTransaction({
     custom_field1: sessionId,
     // Ini parameter batas waktu 3 menit
     custom_expiry: {
-      expiry_duration: 3,
+      expiry_duration: 2,
       unit: "minute"
     },
     // Opsional: jika kamu HANYA ingin memunculkan QRIS di popup Snap
