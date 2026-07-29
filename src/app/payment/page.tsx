@@ -64,6 +64,7 @@ export default function Payment() {
   }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, session?.paymentRedirectUrl, setPaymentData]);
 
   // Polling for Midtrans payment status
+ // Polling for Midtrans payment status
   useEffect(() => {
     if (!midtransEnabled || !session?.paymentOrderId) return;
 
@@ -71,12 +72,15 @@ export default function Payment() {
       try {
         const res = await fetch(`/api/payment/status?orderId=${session.paymentOrderId}`);
         const data = await res.json();
+        
         if (data.ok && data.status) {
           if (data.status === "confirmed") {
             setPaymentStatus("confirmed");
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); // Hentikan polling
             router.push("/frames");
           } else if (data.status === "failed" || data.status === "timeout") {
             setPaymentStatus(data.status);
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current); // Hentikan polling
           }
         }
       } catch (e) {
