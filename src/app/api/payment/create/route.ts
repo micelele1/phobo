@@ -1,36 +1,41 @@
 import { NextResponse } from "next/server";
-import { createSnapTransaction } from "@/lib/payment/midtrans";
+import { generateUniqueCode } from "@/lib/payment/mutation";
+import { setPaymentStatus } from "@/lib/payment/status-store";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    if (process.env.MIDTRANS_ENABLED !== "true") {
-      return NextResponse.json({ ok: false, reason: "disabled" }, { status: 200 });
-    }
-
     const { sessionId, packageId, packageName, amount } = await request.json();
 
     if (!sessionId || !amount) {
       return NextResponse.json({ ok: false, error: "Missing required fields" }, { status: 400 });
     }
 
+    // Mendapatkan angka acak 1-99 dari fungsi yang baru kita buat
+    const uniqueCode = generateUniqueCode();
+    
+    // Menambahkan harga dasar paket dengan kode unik
+    const finalAmount = amount + uniqueCode;
+
     const orderId = `phobo-${sessionId.replace(/[^a-zA-Z0-9-]/g, "")}-${Date.now()}`;
     
-    const { token, redirectUrl } = await createSnapTransaction({
-      orderId,
-      grossAmount: amount,
-      sessionId,
-    });
+    // Mencatat pesanan baru ini ke dalam sistem memori agar bisa dibaca oleh dashboard operator
+    // dan juga bisa dipantau oleh layar Kiosk
+    setPaymentStatus(orderId, "pending");
 
+    // Mengirimkan total tagihan yang baru ke layar Kiosk
     return NextResponse.json({
       ok: true,
       orderId,
-      token,
-      redirectUrl
+      finalAmount,
+      uniqueCode
     });
   } catch (error) {
     console.error("[Payment Create] Error:", error);
-    return NextResponse.json({ ok: false, error: "Failed to create payment transaction" }, { status: 500 });
+    
+    // Menangkap error jika antrean 99 kode unik sedang penuh
+    const errorMessage = error instanceof Error ? error.message : "Failed to create payment transaction";
+    return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 });
   }
 }

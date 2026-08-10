@@ -2,17 +2,15 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, QrScreen } from "@/components/kiosk";
-import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
 import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Payment() {
   const router = useRouter(); 
   const { session, hasHydrated, setPaymentStatus, setPaymentData } = useSessionStore(); 
-  const [midtransEnabled, setMidtransEnabled] = useState(false);
+  const [paymentEnabled, setPaymentEnabled] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
+  const [finalAmount, setFinalAmount] = useState<number | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const paymentUrl = session?.paymentRedirectUrl || process.env.NEXT_PUBLIC_PHOTOBO_PAYMENT_URL || "https://payment.invalid/phobo-demo";
 
   useEffect(() => { 
     if (hasHydrated && !session?.selectedPackageId) router.replace("/packages"); 
@@ -21,9 +19,10 @@ export default function Payment() {
   useEffect(() => {
     if (!hasHydrated || !session?.sessionId || !session?.price) return;
 
-    // Only create a transaction once per session
-    if (session.paymentOrderId && session.paymentRedirectUrl) {
-      setMidtransEnabled(true);
+    // Mencegah pembuatan transaksi ganda jika sesi sudah memiliki orderId
+    if (session.paymentOrderId && session.paymentAmount) {
+      setFinalAmount(session.paymentAmount);
+      setPaymentEnabled(true);
       setIsInitializing(false);
       return;
     }
@@ -41,38 +40,41 @@ export default function Payment() {
           }),
         });
         const data = await res.json();
+        
         if (data.ok) {
-          setMidtransEnabled(true);
+          setPaymentEnabled(true);
+          setFinalAmount(data.finalAmount);
+          
           setPaymentData({
             paymentOrderId: data.orderId,
-            paymentSnapToken: data.token,
-            paymentRedirectUrl: data.redirectUrl,
-            paymentAmount: session.price,
+            paymentAmount: data.finalAmount, // Menyimpan harga unik ke memori sesi
           });
         } else {
-          setMidtransEnabled(false);
+          setPaymentEnabled(false);
         }
       } catch (e) {
-        console.error("Failed to init Midtrans", e);
-        setMidtransEnabled(false);
+        console.error("Failed to init payment", e);
+        setPaymentEnabled(false);
       } finally {
         setIsInitializing(false);
       }
     };
 
     initPayment();
-  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, session?.paymentRedirectUrl, setPaymentData]);
+  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, session?.paymentAmount, setPaymentData]);
 
-  // Polling for Midtrans payment status
+  // Polling untuk mengecek status pembayaran dari operator
   useEffect(() => {
-    if (!midtransEnabled || !session?.paymentOrderId) return;
+    if (!paymentEnabled || !session?.paymentOrderId) return;
 
     const checkStatus = async () => {
       try {
         const res = await fetch(`/api/payment/status?orderId=${session.paymentOrderId}`);
         const data = await res.json();
+        
         if (data.ok && data.status) {
-          if (data.status === "confirmed") {
+          // Menerima status confirmed atau paid dari dashboard operator
+          if (data.status === "confirmed" || data.status === "paid") {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setPaymentStatus("confirmed");
             router.push("/frames");
@@ -91,19 +93,34 @@ export default function Payment() {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [midtransEnabled, session?.paymentOrderId, router, setPaymentStatus]);
+  }, [paymentEnabled, session?.paymentOrderId, router, setPaymentStatus]);
+
+  // Fungsi untuk memformat angka Rupiah dan menebalkan 3 digit terakhir
+  const renderFormattedPrice = (amount: number | null) => {
+    if (!amount) return "Rp. 0,00";
+    const formatted = amount.toLocaleString("id-ID");
+    const parts = formatted.split('.');
+    
+    if (parts.length > 1) {
+      const lastPart = parts.pop();
+      const frontPart = parts.join('.');
+      return <>Rp. {frontPart}.<b>{lastPart}</b>,00</>;
+    }
+    
+    return <>Rp. <b>{formatted}</b>,00</>;
+  };
 
   return (
     <KioskStage>
       <QrScreen 
-        title={midtransEnabled ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
-        initialSeconds={120} 
-        completionText="PAYMENT TIMEOUT" 
+        title={paymentEnabled ? "SCAN UNTUK BAYAR" : "PAYMENT ERROR"} 
+        initialSeconds={180} 
+        completionText="WAKTU HABIS" 
         onComplete={() => setPaymentStatus("timeout")} 
         qrContent={
           !isInitializing 
-            ? midtransEnabled 
-              ? <ResultQrCode value={paymentUrl} /> 
+            ? paymentEnabled 
+              ? <img src="/qris.png" alt="QRIS" style={{width: '100%', height: '100%', objectFit: 'contain', borderRadius: '8px'}} />
               : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
                   <span style={{fontSize: '48px'}}>⚙️</span>
                   <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
@@ -111,11 +128,22 @@ export default function Payment() {
             : <div className="qr-image" style={{display: "grid", placeItems: "center", background: "#fff", width:"100%", height:"100%", borderRadius: "8px"}}>...</div>
         } 
       />
-      <div className="payment-summary">
-        {session?.packageName} - Rp. {(session?.price ?? 0).toLocaleString("id-ID")},00
+      <div className="payment-summary" style={{ textAlign: "center" }}>
+        
+        <div style={{ fontSize: '24px', marginBottom: '10px' }}>
+          {session?.packageName} - {renderFormattedPrice(finalAmount)}
+        </div>
+        
+        {paymentEnabled && (
+          <div style={{ backgroundColor: '#fff3cd', color: '#856404', padding: '10px 15px', borderRadius: '8px', marginBottom: '15px' }}>
+            <p style={{ margin: 0, fontSize: '16px' }}>
+              Mohon pastikan <b>tiga digit terakhir</b> Anda sesuai.
+            </p>
+          </div>
+        )}
         
         {session?.paymentOrderId && (
-          <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444' }}>
+          <div style={{ marginTop: '5px', padding: '10px', backgroundColor: '#222', borderRadius: '8px', border: '1px solid #444' }}>
             <p style={{ fontSize: '14px', color: '#aaa', margin: '0 0 5px 0' }}>Jika terjadi kendala, silakan foto layar ini</p>
             <p style={{ fontSize: '18px', fontFamily: 'monospace', margin: '0', color: '#fff', letterSpacing: '2px' }}>
               ID: {session.paymentOrderId}
@@ -123,11 +151,9 @@ export default function Payment() {
           </div>
         )}
 
-        {!midtransEnabled && !isInitializing && (
+        {!paymentEnabled && !isInitializing && (
           <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
-            {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
-              ? "(Manual debug mode)" 
-              : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
+            Sistem pembayaran sedang tidak tersedia.
           </div>
         )}
       </div>
