@@ -1,12 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
 
-// Tipe data untuk pesanan yang aktif
 interface ActiveOrder {
   orderId: string;
   status: string;
   amount: number;
-  uniqueCode: number;
   timestamp: number;
 }
 
@@ -14,7 +12,6 @@ export default function OperatorDashboard() {
   const [orders, setOrders] = useState<ActiveOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fungsi untuk mengambil daftar pesanan aktif dari server
   const fetchActiveOrders = async () => {
     try {
       const res = await fetch("/api/payment/active");
@@ -30,15 +27,13 @@ export default function OperatorDashboard() {
     }
   };
 
-  // Melakukan polling setiap 3 detik untuk memperbarui daftar antrean
   useEffect(() => {
     fetchActiveOrders();
     const interval = setInterval(fetchActiveOrders, 3000);
     return () => clearInterval(interval);
   }, []);
 
-  // Fungsi saat operator menekan tombol lunas
-  const handleConfirmPayment = async (orderId: string, uniqueCode: number) => {
+  const handleConfirmPayment = async (orderId: string) => {
     const isConfirmed = window.confirm(`Konfirmasi pembayaran lunas untuk pesanan ini?`);
     
     if (!isConfirmed) return;
@@ -49,8 +44,7 @@ export default function OperatorDashboard() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           orderId,
-          status: "confirmed",
-          uniqueCode
+          status: "confirmed"
         }),
       });
 
@@ -58,7 +52,7 @@ export default function OperatorDashboard() {
       
       if (data.ok) {
         alert("Pesanan berhasil dikonfirmasi! Mesin photobox akan segera menyala.");
-        fetchActiveOrders(); // Perbarui daftar setelah konfirmasi
+        fetchActiveOrders(); 
       } else {
         alert("Gagal mengonfirmasi pesanan.");
       }
@@ -96,7 +90,7 @@ export default function OperatorDashboard() {
               </div>
               
               <button 
-                onClick={() => handleConfirmPayment(order.orderId, order.uniqueCode)}
+                onClick={() => handleConfirmPayment(order.orderId)}
                 style={{ width: "100%", padding: "12px", backgroundColor: "#28a745", color: "white", border: "none", borderRadius: "6px", fontSize: "16px", cursor: "pointer", marginTop: "10px" }}
               >
                 KONFIRMASI LUNAS

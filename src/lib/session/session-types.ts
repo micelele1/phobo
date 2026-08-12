@@ -55,5 +55,9 @@ export type KioskSession = {
   addPrintPaymentRedirectUrl?: string;
   addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "failed";
   additionalPrintImageUrl?: string;
+  //data ini bersifat opsional dan boleh kosong di awal sesi
+  paymentMode?: string;
+  payableAmount?: number;
+  uniqueCode?: number;
 };
 
