@@ -11,8 +11,6 @@ export default function Payment() {
   const [isInitializing, setIsInitializing] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Tentukan path gambar QR statis milikmu di sini
-  // Pastikan file qris.png sudah kamu letakkan di dalam folder public
   const staticQrPath = "/qris.png";
 
   useEffect(() => { 
@@ -44,11 +42,15 @@ export default function Payment() {
         
         if (data.ok) {
           setPaymentActive(true);
-          // Hanya mengirimkan data yang diizinkan oleh tipe TypeScript bawaan aplikasimu
           setPaymentData({
             paymentOrderId: data.orderId,
             paymentAmount: session.price,
           });
+        } else if (data.reason === "disabled") {
+          // Logika untuk langsung melompat ke halaman foto ada di sini
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setPaymentStatus("confirmed");
+          router.push("/frames");
         } else {
           setPaymentActive(false);
         }
@@ -61,7 +63,7 @@ export default function Payment() {
     };
 
     initPayment();
-  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, setPaymentData]);
+  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, setPaymentData, router, setPaymentStatus]);
 
   useEffect(() => {
     if (!paymentActive || !session?.paymentOrderId) return;
@@ -81,7 +83,6 @@ export default function Payment() {
           }
         }
       } catch (e) {
-        // Error failed to fetch saat server recompile akan diabaikan
       }
     };
 

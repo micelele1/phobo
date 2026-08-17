@@ -5,6 +5,10 @@ export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    if (process.env.PAYMENT_ENABLED === "false") {
+      return NextResponse.json({ ok: false, reason: "disabled" }, { status: 200 });
+    }
+
     const { sessionId, packageId, packageName, amount } = await request.json();
 
     if (!sessionId || !amount) {

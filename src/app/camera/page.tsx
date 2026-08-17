@@ -2,9 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CameraLiveView, type CameraLiveViewHandle } from "@/components/camera-live-view";
 import { BackgroundPicker, KioskButton, KioskStage } from "@/components/kiosk";
-import { backgrounds, getFrameById } from "@/lib/phobo-data";
+import { backgrounds } from "@/lib/phobo-data";
 import { useSessionStore } from "@/lib/session/session-store";
 
 type CaptureResponse = {
@@ -18,20 +17,11 @@ type CaptureResponse = {
 export default function Camera() {
   const router = useRouter();
   const { session, hasHydrated, selectBackground, addCapturedPhoto } = useSessionStore();
-  const live = useRef<CameraLiveViewHandle>(null);
   const captureLock = useRef(false);
   const shotCount = useRef(0);
   const [message, setMessage] = useState("");
   const [isCapturing, setIsCapturing] = useState(false);
-  const [mode, setMode] = useState("mock");
   const [countdown, setCountdown] = useState<number | string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/diagnostics")
-      .then((response) => response.json())
-      .then((data) => setMode(data.env?.cameraMode || "mock"))
-      .catch(() => {});
-  }, []);
 
   useEffect(() => {
     if (!hasHydrated) return;
@@ -41,7 +31,7 @@ export default function Camera() {
 
   const count = session?.capturedPhotos.length ?? 0;
   const max = session?.maxShots ?? 8;
-  const required = max; // require full package shot count
+  const required = max;
   const maxReached = count >= max;
   shotCount.current = count;
 
@@ -62,28 +52,16 @@ export default function Camera() {
     setMessage("");
 
     try {
-      let response: Response;
-
-      if (mode === "browser-video") {
-        if (live.current?.getStatus() !== "active") throw new Error("START LIVE VIEW DULU");
-        const frame = live.current.captureFrame();
-        response = await fetch("/api/camera/browser-frame", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.sessionId, imageDataUrl: frame.rawImageDataUrl, displayImageDataUrl: frame.displayImageDataUrl }),
-        });
-      } else {
-        live.current?.stopLiveView();
-        response = await fetch("/api/camera/capture", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: session.sessionId }),
-        });
-      }
+      const response = await fetch("/api/camera/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.sessionId }),
+      });
 
       const data = (await response.json()) as CaptureResponse;
       const url = data.capturedPhotoUrl || data.imageUrl;
       const displayUrl = data.displayPhotoUrl || url;
+      
       if (!response.ok || !data.ok || !url) throw new Error(data.error || "CAMERA CAPTURE GAGAL");
 
       if (shotCount.current >= max) return;
@@ -103,13 +81,24 @@ export default function Camera() {
       <div className="shot-counter">
         Shoot {maxReached ? max : count + 1} / {max}
       </div>
-      <CameraLiveView 
-        ref={live} 
-        compact 
-        autoStart
-        selectedBackgroundUrl={backgrounds.find(bg => bg.id === session?.selectedBackgroundId)?.imageUrl}
-        tuning={session?.greenScreenTuning}
-      />
+      
+      <div style={{
+        position: "absolute",
+        top: "7.73%", left: "3.47%", width: "72%", height: "70%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "#1a1a1a",
+        borderRadius: "16px",
+        color: "#666",
+        border: "2px dashed #333",
+        zIndex: 10
+      }}>
+        <span style={{ fontSize: "64px", marginBottom: "20px" }}>📷</span>
+        <span style={{ fontSize: "24px", letterSpacing: "2px", fontWeight: "bold" }}>MOHON LIHAT KE LENSA KAMERA</span>
+      </div>
+
       {countdown !== null && (
         <div style={{
           position: "absolute",
@@ -127,16 +116,18 @@ export default function Camera() {
           {countdown}
         </div>
       )}
+      
       <BackgroundPicker
         backgrounds={backgrounds}
         selectedBackgroundId={session?.selectedBackgroundId}
         onSelectBackground={selectBackground}
       />
+      
       <footer className="camera-actions">
         <div className="camera-status" aria-live="polite">
           {maxReached ? (
             <>
-              <strong>FOTO MAKSIMAL TERCAPAI</strong>
+              <span style={{fontWeight: "bold"}}>FOTO MAKSIMAL TERCAPAI</span>
               <span>LANJUT PILIH FOTO</span>
             </>
           ) : (
