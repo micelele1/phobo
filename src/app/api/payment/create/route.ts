@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { createSnapTransaction } from "@/lib/payment/midtrans";
+import { setPaymentStatus } from "@/lib/payment/status-store";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
-    if (process.env.MIDTRANS_ENABLED !== "true") {
+    if (process.env.PAYMENT_ENABLED === "false") {
       return NextResponse.json({ ok: false, reason: "disabled" }, { status: 200 });
     }
 
@@ -17,17 +17,12 @@ export async function POST(request: Request) {
 
     const orderId = `phobo-${sessionId.replace(/[^a-zA-Z0-9-]/g, "")}-${Date.now()}`;
     
-    const { token, redirectUrl } = await createSnapTransaction({
-      orderId,
-      grossAmount: amount,
-      sessionId,
-    });
+    setPaymentStatus(orderId, "pending");
 
     return NextResponse.json({
       ok: true,
       orderId,
-      token,
-      redirectUrl
+      finalAmount: amount
     });
   } catch (error) {
     console.error("[Payment Create] Error:", error);

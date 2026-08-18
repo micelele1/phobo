@@ -40,6 +40,7 @@ export type KioskSession = {
   selectedBackgroundId?: string;
   capturedPhotos: { raw: string; display: string }[];
   selectedPhotoIndices: number[];
+  additionalSelectedPhotoIndices?: number[];
   selectedStickerId?: string;
   stickers: StickerPlacement[];
   finalImageUrl?: string;
@@ -54,5 +55,9 @@ export type KioskSession = {
   addPrintPaymentRedirectUrl?: string;
   addPrintPaymentStatus?: "unpaid" | "pending" | "paid" | "failed";
   additionalPrintImageUrl?: string;
+  //data ini bersifat opsional dan boleh kosong di awal sesi
+  paymentMode?: string;
+  payableAmount?: number;
+  uniqueCode?: number;
 };
 

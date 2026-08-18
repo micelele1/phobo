@@ -2,17 +2,16 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { KioskStage, QrScreen } from "@/components/kiosk";
-import { ResultQrCode } from "@/components/kiosk/ResultQrCode";
 import { useSessionStore } from "@/lib/session/session-store";
 
 export default function Payment() {
   const router = useRouter(); 
   const { session, hasHydrated, setPaymentStatus, setPaymentData } = useSessionStore(); 
-  const [midtransEnabled, setMidtransEnabled] = useState(false);
+  const [paymentActive, setPaymentActive] = useState(false);
   const [isInitializing, setIsInitializing] = useState(true);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  const paymentUrl = session?.paymentRedirectUrl || process.env.NEXT_PUBLIC_PHOTOBO_PAYMENT_URL || "https://payment.invalid/phobo-demo";
+  const staticQrPath = "/qris.png";
 
   useEffect(() => { 
     if (hasHydrated && !session?.selectedPackageId) router.replace("/packages"); 
@@ -21,9 +20,8 @@ export default function Payment() {
   useEffect(() => {
     if (!hasHydrated || !session?.sessionId || !session?.price) return;
 
-    // Only create a transaction once per session
-    if (session.paymentOrderId && session.paymentRedirectUrl) {
-      setMidtransEnabled(true);
+    if (session.paymentOrderId) {
+      setPaymentActive(true);
       setIsInitializing(false);
       return;
     }
@@ -41,31 +39,34 @@ export default function Payment() {
           }),
         });
         const data = await res.json();
+        
         if (data.ok) {
-          setMidtransEnabled(true);
+          setPaymentActive(true);
           setPaymentData({
             paymentOrderId: data.orderId,
-            paymentSnapToken: data.token,
-            paymentRedirectUrl: data.redirectUrl,
             paymentAmount: session.price,
           });
+        } else if (data.reason === "disabled") {
+          // Logika untuk langsung melompat ke halaman foto ada di sini
+          if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+          setPaymentStatus("confirmed");
+          router.push("/frames");
         } else {
-          setMidtransEnabled(false);
+          setPaymentActive(false);
         }
       } catch (e) {
-        console.error("Failed to init Midtrans", e);
-        setMidtransEnabled(false);
+        console.error("Failed to init payment", e);
+        setPaymentActive(false);
       } finally {
         setIsInitializing(false);
       }
     };
 
     initPayment();
-  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, session?.paymentRedirectUrl, setPaymentData]);
+  }, [hasHydrated, session?.sessionId, session?.price, session?.paymentOrderId, setPaymentData, router, setPaymentStatus]);
 
-  // Polling for Midtrans payment status
   useEffect(() => {
-    if (!midtransEnabled || !session?.paymentOrderId) return;
+    if (!paymentActive || !session?.paymentOrderId) return;
 
     const checkStatus = async () => {
       try {
@@ -73,14 +74,15 @@ export default function Payment() {
         const data = await res.json();
         if (data.ok && data.status) {
           if (data.status === "confirmed") {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setPaymentStatus("confirmed");
             router.push("/frames");
           } else if (data.status === "failed" || data.status === "timeout") {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
             setPaymentStatus(data.status);
           }
         }
       } catch (e) {
-        console.error("Failed to poll status", e);
       }
     };
 
@@ -89,19 +91,27 @@ export default function Payment() {
     return () => {
       if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
     };
-  }, [midtransEnabled, session?.paymentOrderId, router, setPaymentStatus]);
+  }, [paymentActive, session?.paymentOrderId, router, setPaymentStatus]);
+
+  const basePrice = session?.price ?? 0;
 
   return (
     <KioskStage>
       <QrScreen 
-        title={midtransEnabled ? "SCAN UNTUK BAYAR" : "PAYMENT DISABLED"} 
+        title={paymentActive ? "SCAN UNTUK BAYAR" : "PAYMENT ERROR"} 
         initialSeconds={120} 
-        completionText="PAYMENT TIMEOUT" 
+        completionText="WAKTU HABIS" 
         onComplete={() => setPaymentStatus("timeout")} 
         qrContent={
           !isInitializing 
-            ? midtransEnabled 
-              ? <ResultQrCode value={paymentUrl} /> 
+            ? paymentActive 
+              ? (
+                  <img 
+                    src={staticQrPath} 
+                    alt="Merchant QRIS" 
+                    style={{width: '100%', height: '100%', objectFit: 'contain', background: '#fff', padding: '10px', borderRadius: '8px'}}
+                  />
+                )
               : <div style={{width: '100%', height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#222', color: '#aaa', borderRadius: '8px', textAlign: 'center'}}>
                   <span style={{fontSize: '48px'}}>⚙️</span>
                   <span style={{marginTop: '10px', fontSize: '18px'}}>OFFLINE</span>
@@ -110,12 +120,11 @@ export default function Payment() {
         } 
       />
       <div className="payment-summary">
-        {session?.packageName} - Rp. {(session?.price ?? 0).toLocaleString("id-ID")},00
-        {!midtransEnabled && !isInitializing && (
+        <div>{session?.packageName} - Rp. {basePrice.toLocaleString("id-ID")},00</div>
+        
+        {!paymentActive && !isInitializing && (
           <div style={{fontSize: 16, opacity: 0.7, marginTop: 10}}>
-            {process.env.NEXT_PUBLIC_PAYMENT_DEBUG === "true" 
-              ? "(Manual debug mode)" 
-              : "Payment gateway is disabled. Enable Midtrans or debug fallback to continue."}
+            Sistem pembayaran sedang tidak tersedia.
           </div>
         )}
       </div>
